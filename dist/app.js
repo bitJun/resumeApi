@@ -4,6 +4,21 @@ import { env } from "./config/env.js";
 import candidateRoutes from "./routes/candidate.routes.js";
 import jobRoutes from "./routes/job.routes.js";
 import systemRoutes from "./routes/system.routes.js";
+function escapeRegExp(value) {
+    return value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+}
+function isAllowedOrigin(origin) {
+    return env.allowedOrigins.some((pattern) => {
+        if (pattern === origin) {
+            return true;
+        }
+        if (!pattern.includes("*")) {
+            return false;
+        }
+        const regex = new RegExp(`^${pattern.split("*").map(escapeRegExp).join(".*")}$`);
+        return regex.test(origin);
+    });
+}
 function buildCorsOptions() {
     return {
         origin(origin, callback) {
@@ -12,7 +27,7 @@ function buildCorsOptions() {
                 callback(null, true);
                 return;
             }
-            if (env.allowedOrigins.includes(origin)) {
+            if (isAllowedOrigin(origin)) {
                 callback(null, true);
                 return;
             }
