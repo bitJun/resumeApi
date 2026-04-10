@@ -40,6 +40,25 @@ function serializeCandidate(candidate) {
         fileUrl: `/api/candidates/${candidate.id}/file`
     };
 }
+async function runCandidateExtraction(candidateId, onEvent) {
+    const candidate = getCandidateById(candidateId);
+    if (!candidate) {
+        return null;
+    }
+    updateCandidateExtractionStatus(candidate.id, "processing");
+    onEvent?.("status", { label: "开始 AI 信息提取", progress: 0 });
+    try {
+        const extraction = await streamResumeExtraction(candidate, (event, data) => onEvent?.(event, data));
+        const updated = updateCandidateExtraction(candidate.id, extraction);
+        onEvent?.("done", { candidate: serializeCandidate(updated) });
+        return updated;
+    }
+    catch (error) {
+        updateCandidateExtractionStatus(candidate.id, "failed");
+        onEvent?.("error", { message: error instanceof Error ? error.message : "提取失败" });
+        throw error;
+    }
+}
 router.get("/compare", (req, res) => {
     const ids = String(req.query.ids ?? "")
         .split(",")
@@ -185,19 +204,26 @@ router.get("/:id/extraction-stream", async (req, res) => {
         clearInterval(heartbeat);
     });
     try {
-        updateCandidateExtractionStatus(candidate.id, "processing");
-        writeEvent("status", { label: "开始 AI 信息提取", progress: 0 });
-        const extraction = await streamResumeExtraction(candidate, writeEvent);
-        const updated = updateCandidateExtraction(candidate.id, extraction);
-        writeEvent("done", { candidate: serializeCandidate(updated) });
+        await runCandidateExtraction(candidate.id, writeEvent);
     }
     catch (error) {
-        updateCandidateExtractionStatus(candidate.id, "failed");
         writeEvent("error", { message: error instanceof Error ? error.message : "提取失败" });
     }
     finally {
         clearInterval(heartbeat);
         res.end();
+    }
+});
+router.post("/:id/extract", async (req, res, next) => {
+    try {
+        const updated = await runCandidateExtraction(req.params.id);
+        if (!updated) {
+            return res.status(404).json({ message: "候选人不存在。" });
+        }
+        res.json({ candidate: serializeCandidate(updated) });
+    }
+    catch (error) {
+        next(error);
     }
 });
 router.patch("/:id/extraction", (req, res) => {

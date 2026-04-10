@@ -1,0 +1,13 @@
+[build]
+  command = "npm run build"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  external_node_modules = ["express", "serverless-http", "better-sqlite3", "multer", "pdf-parse", "cors", "dotenv"]
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/api/:splat"
+  status = 200
+  force = true
